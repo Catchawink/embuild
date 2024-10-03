@@ -115,7 +115,7 @@ impl Factory {
         self.create_builder(true, None)
     }
 
-    fn create_builder(self, cpp: bool, extra_args: Option<Vec<String>>) -> Result<bindgen::Builder> {
+    pub fn create_builder(self, cpp: bool, extra_args: Option<Vec<String>>) -> Result<bindgen::Builder> {
         let cpp = self.force_cpp || cpp;
         let sysroot = self
             .sysroot

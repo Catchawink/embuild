@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
+use serde::Deserialize;
 
 use crate::cargo::out_dir;
 use crate::utils::OsStrExt;
@@ -13,6 +14,18 @@ use crate::{cargo, cmd};
 /// The environment variable name containing the file path of the file that contains the
 /// generated bindings.
 pub const VAR_BINDINGS_FILE: &str = "EMBUILD_GENERATED_BINDINGS_FILE";
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Filter {
+    #[serde(default)]
+    pub allow_types: Option<Vec<String>>,
+
+    #[serde(default)]
+    pub allow_functions: Option<Vec<String>>,
+
+    #[serde(default)]
+    pub allow_vars: Option<Vec<String>>
+}
 
 /// A builder for creating a [`bindgen::Builder`].
 #[derive(Clone, Default, Debug)]
@@ -115,7 +128,7 @@ impl Factory {
         self.create_builder(true, None)
     }
 
-    pub fn create_builder(self, cpp: bool, extra_args: Option<Vec<String>>) -> Result<bindgen::Builder> {
+    pub fn create_builder(self, cpp: bool, filter: Option<Filter>) -> Result<bindgen::Builder> {
         let cpp = self.force_cpp || cpp;
         let sysroot = self
             .sysroot
@@ -147,8 +160,22 @@ impl Factory {
             .clang_args(&["-x", if cpp { "c++" } else { "c" }])
             .clang_args(cpp_args);
 
-        if let Some(extra_args) = extra_args {
-            builder = builder.clang_args(extra_args);
+        if let Some(filter) = filter {
+            if let Some(allow_functions) = filter.allow_functions {
+                for allow_function in allow_functions {
+                    builder = builder.allowlist_function(allow_function);
+                }
+            }
+            if let Some(allow_types) = filter.allow_types {
+                for allow_type in allow_types {
+                    builder = builder.allowlist_type(allow_type);
+                }
+            }
+            if let Some(allow_vars) = filter.allow_vars {
+                for allow_var in allow_vars {
+                    builder = builder.allowlist_var(allow_var);
+                }
+            }
         }
 
         log::debug!(

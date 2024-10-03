@@ -158,7 +158,8 @@ impl Factory {
             .clang_args(&self.clang_args)
             .clang_args(sysroot_args)
             .clang_args(&["-x", if cpp { "c++" } else { "c" }])
-            .clang_args(cpp_args);
+            .clang_args(cpp_args)
+            .generate_inline_functions(cpp);
 
         if let Some(filter) = filter {
             if let Some(allow_functions) = filter.allow_functions {

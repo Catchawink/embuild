@@ -107,15 +107,15 @@ impl Factory {
 
     /// Create a [`bindgen::Builder`] with these settings.
     pub fn builder(self) -> Result<bindgen::Builder> {
-        self.create_builder(false)
+        self.create_builder(false, None)
     }
 
     /// Create a [`bindgen::Builder`] creating C++ bindings with these settings.
     pub fn cpp_builder(self) -> Result<bindgen::Builder> {
-        self.create_builder(true)
+        self.create_builder(true, None)
     }
 
-    fn create_builder(self, cpp: bool) -> Result<bindgen::Builder> {
+    fn create_builder(self, cpp: bool, extra_args: Option<Vec<String>>) -> Result<bindgen::Builder> {
         let cpp = self.force_cpp || cpp;
         let sysroot = self
             .sysroot
@@ -133,7 +133,7 @@ impl Factory {
             vec![]
         };
 
-        let builder = bindgen::Builder::default()
+        let mut builder = bindgen::Builder::default()
             .use_core()
             .layout_tests(false)
             .formatter(bindgen::Formatter::None)
@@ -146,6 +146,10 @@ impl Factory {
             .clang_args(sysroot_args)
             .clang_args(&["-x", if cpp { "c++" } else { "c" }])
             .clang_args(cpp_args);
+
+        if let Some(extra_args) = extra_args {
+            builder = builder.clang_args(extra_args);
+        }
 
         log::debug!(
             "Bindgen builder factory flags: {:?}",

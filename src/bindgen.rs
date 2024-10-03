@@ -171,7 +171,7 @@ impl Factory {
             .clang_args(sysroot_args)
             .clang_args(&["-x", if cpp { "c++" } else { "c" }])
             .clang_args(cpp_args)
-            .generate_inline_functions(cpp);
+            .generate_inline_functions(cpp).clang_arg("-fno-inline-functions");
 
         if let Some(filter) = filter {
             if let Some(allow_functions) = filter.allow_functions {

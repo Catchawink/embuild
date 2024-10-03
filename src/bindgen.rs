@@ -27,6 +27,9 @@ pub struct Filter {
     pub allow_vars: Option<Vec<String>>,
     
     #[serde(default)]
+    pub block_types: Option<Vec<String>>,
+
+    #[serde(default)]
     pub block_files: Option<Vec<String>>
 }
 
@@ -178,6 +181,11 @@ impl Factory {
             if let Some(allow_vars) = filter.allow_vars {
                 for allow_var in allow_vars {
                     builder = builder.allowlist_var(allow_var);
+                }
+            }
+            if let Some(block_types) = filter.block_types {
+                for block_type in block_types {
+                    builder = builder.blocklist_type(block_type);
                 }
             }
             if let Some(block_files) = filter.block_files {

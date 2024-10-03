@@ -30,6 +30,12 @@ pub struct Filter {
     pub block_types: Option<Vec<String>>,
 
     #[serde(default)]
+    pub block_functions: Option<Vec<String>>,
+    
+    #[serde(default)]
+    pub block_vars: Option<Vec<String>>,
+
+    #[serde(default)]
     pub block_files: Option<Vec<String>>
 }
 
@@ -186,6 +192,16 @@ impl Factory {
             if let Some(block_types) = filter.block_types {
                 for block_type in block_types {
                     builder = builder.blocklist_type(block_type);
+                }
+            }
+            if let Some(block_functions) = filter.block_functions {
+                for block_function in block_functions {
+                    builder = builder.blocklist_type(block_function);
+                }
+            }
+            if let Some(block_vars) = filter.block_vars {
+                for block_var in block_vars {
+                    builder = builder.blocklist_type(block_var);
                 }
             }
             if let Some(block_files) = filter.block_files {

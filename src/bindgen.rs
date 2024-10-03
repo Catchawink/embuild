@@ -196,12 +196,12 @@ impl Factory {
             }
             if let Some(block_functions) = filter.block_functions {
                 for block_function in block_functions {
-                    builder = builder.blocklist_type(block_function);
+                    builder = builder.blocklist_function(block_function);
                 }
             }
             if let Some(block_vars) = filter.block_vars {
                 for block_var in block_vars {
-                    builder = builder.blocklist_type(block_var);
+                    builder = builder.blocklist_var(block_var);
                 }
             }
             if let Some(block_files) = filter.block_files {

@@ -24,7 +24,10 @@ pub struct Filter {
     pub allow_functions: Option<Vec<String>>,
 
     #[serde(default)]
-    pub allow_vars: Option<Vec<String>>
+    pub allow_vars: Option<Vec<String>>,
+    
+    #[serde(default)]
+    pub block_files: Option<Vec<String>>
 }
 
 /// A builder for creating a [`bindgen::Builder`].
@@ -175,6 +178,11 @@ impl Factory {
             if let Some(allow_vars) = filter.allow_vars {
                 for allow_var in allow_vars {
                     builder = builder.allowlist_var(allow_var);
+                }
+            }
+            if let Some(block_files) = filter.block_files {
+                for block_file in block_files {
+                    builder = builder.blocklist_file(block_file);
                 }
             }
         }

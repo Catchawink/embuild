@@ -171,7 +171,27 @@ impl Factory {
             .clang_args(sysroot_args)
             .clang_args(&["-x", if cpp { "c++" } else { "c" }])
             .clang_args(cpp_args)
-            .clang_arg("-DTF_LITE_STATIC_MEMORY");
+            .clang_args([
+                "-DTF_LITE_STATIC_MEMORY",
+                "-DTF_LITE_DISABLE_X86_NEON",
+                "-O3",
+                "-Wstrict-aliasing",
+                "-Wno-unused-parameter",
+                "-Wall",
+                "-Wextra",
+                "-Wvla",
+                "-Wsign-compare",
+                "-Wdouble-promotion",
+                "-Wswitch",
+                "-Wunused-function",
+                "-Wmissing-field-initializers",
+                "-ffunction-sections",
+                "-fdata-sections",
+                "-Wshadow",
+                "-Wunused-variable",
+                "-fno-unwind-tables",
+                "-fmessage-length=0",
+            ]);
 
         if let Some(filter) = filter {
             if let Some(allow_functions) = filter.allow_functions {

@@ -173,7 +173,6 @@ impl Factory {
             .clang_args(cpp_args)
             .clang_args([
                 "-DTF_LITE_STATIC_MEMORY",
-                "-DTF_LITE_STRIP_ERROR_STRINGS",
                 "-DTF_LITE_DISABLE_X86_NEON",
                 "-O3",
                 "-Wstrict-aliasing",

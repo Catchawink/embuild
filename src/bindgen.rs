@@ -201,14 +201,12 @@ impl Factory {
                 "-std=gnu++14",
                 "-Wno-error=attributes",
                 "-Wno-error=shadow",
-                "-Wno-maybe-uninitialized",
                 "-Wno-missing-field-initializers",
                 "-Wno-error=sign-compare",
                 "-Wno-error=double-promotion",
                 "-Wno-type-limits",
                 "-Wno-nonnull",
                 "-DESP_NN",
-                "-Wno-error=stringop-overread",
                 "-lm"
             ]);
 

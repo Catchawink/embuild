@@ -191,6 +191,25 @@ impl Factory {
                 "-Wunused-variable",
                 "-fno-unwind-tables",
                 "-fmessage-length=0",
+                "-std=c++11",
+                "-fno-rtti",
+                "-fno-exceptions",
+                "-fno-threadsafe-statics",
+                "-Werror",
+                "-Wno-return-type",
+                "-Wno-strict-aliasing",
+                "-std=gnu++14",
+                "-Wno-error=attributes",
+                "-Wno-error=shadow",
+                "-Wno-maybe-uninitialized",
+                "-Wno-missing-field-initializers",
+                "-Wno-error=sign-compare",
+                "-Wno-error=double-promotion",
+                "-Wno-type-limits",
+                "-Wno-nonnull",
+                "-DESP_NN",
+                "-Wno-error=stringop-overread",
+                "-lm"
             ]);
 
         if let Some(filter) = filter {

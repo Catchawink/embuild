@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.0] - 2025-01-02
+
+### Deprecated
+
+### Breaking
+- Module `espidf`: Support building with non-git repositories (#95)
+- Module `espidf`: Provide tools exported env vars; do not assume that each installed tool is an executable binary
+- Rename `BindgenExt::headers` to `Bindgen::path_headers` to avoid collision with the existing `bindgen::Builder::headers` method
+
+### Added
+- Add support for PlatformIO platform = native (#97)
+- Re-export the `bindgen` crate as `embuild::bindgen::types` so that downstream crates can use it without having to add it as a dependency
+
+### Fixed
+
 ## [0.32.0] - 2024-06-23
 ### Breaking
 * bindgen: updated to the latest bindgen version. (#75)

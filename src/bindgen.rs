@@ -11,6 +11,12 @@ use crate::cargo::out_dir;
 use crate::utils::OsStrExt;
 use crate::{cargo, cmd};
 
+/// Re-export the bindgen crate so that downstream crates can use it without
+/// having to add it as a dependency.
+pub mod types {
+    pub use ::bindgen::*;
+}
+
 /// The environment variable name containing the file path of the file that contains the
 /// generated bindings.
 pub const VAR_BINDINGS_FILE: &str = "EMBUILD_GENERATED_BINDINGS_FILE";
@@ -65,7 +71,7 @@ impl Factory {
         Ok(Self {
             clang_args,
             linker: Some(scons_vars.full_path(scons_vars.link.clone())?),
-            mcu: Some(scons_vars.mcu.clone()),
+            mcu: scons_vars.mcu.clone(),
             force_cpp: false,
             sysroot: None,
         })
@@ -299,13 +305,14 @@ pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) ->
 }
 
 /// Extension trait for [`bindgen::Builder`].
+/// Extension trait for [`bindgen::Builder`].
 pub trait BindgenExt: Sized {
     /// Add all input C/C++ headers using repeated [`bindgen::Builder::header`].
-    fn headers(self, headers: impl IntoIterator<Item = impl AsRef<Path>>) -> Result<Self>;
+    fn path_headers(self, headers: impl IntoIterator<Item = impl AsRef<Path>>) -> Result<Self>;
 }
 
 impl BindgenExt for bindgen::Builder {
-    fn headers(mut self, headers: impl IntoIterator<Item = impl AsRef<Path>>) -> Result<Self> {
+    fn path_headers(mut self, headers: impl IntoIterator<Item = impl AsRef<Path>>) -> Result<Self> {
         for header in headers {
             self = self.header(header.as_ref().try_to_str()?)
         }

@@ -9,6 +9,7 @@
 //!
 //! - **`~/.espressif`**, if `install_dir` is None
 
+use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -125,9 +126,14 @@ struct Tool {
     install_dir: PathBuf,
     /// Path relative to install dir
     export_path: PathBuf,
+    /// Environment variables to export for that tool
+    export_vars: HashMap<String, String>,
     /// Command path and args that printout the current version of the tool
     /// - First element is the relative path to the command
-    /// - Every other element represents a arg given to the cmd
+    /// - Every other element represents an arg given to the cmd
+    ///
+    /// Note that if the args are with length 1 and the first element is empty
+    /// then the tool is not really a binary tool and does not have a version command
     version_cmd_args: Vec<String>,
     /// regex to extract the version returned by the version_cmd
     version_regex: String,
@@ -142,28 +148,32 @@ impl Tool {
         if !tool_path.exists() {
             return false;
         }
-        log::debug!(
-            "Run cmd: {:?} to get current tool version",
-            self.test_command(),
-        );
 
-        let output = self.test_command().output().unwrap_or_else(|e| {
-            panic!(
-                "Failed to run command: {:?}; error: {e:?}",
-                self.test_command()
-            )
-        });
+        if let Some(mut test_command) = self.test_command() {
+            log::debug!("Run cmd: {test_command:?} to get current tool version");
 
-        let regex = regex::Regex::new(&self.version_regex).expect("Invalid regex pattern provided");
+            let output = test_command.output().unwrap_or_else(|e| {
+                panic!("Failed to run command: {test_command:?}; error: {e:?}")
+            });
 
-        if let Some(capture) = regex.captures(&String::from_utf8_lossy(&output.stdout)) {
-            if let Some(var) = capture.get(0) {
-                log::debug!("Match: {:?}, Version: {:?}", &var.as_str(), &self.version);
-                return true;
+            if !self.version_regex.is_empty() {
+                let regex =
+                    regex::Regex::new(&self.version_regex).expect("Invalid regex pattern provided");
+
+                if let Some(capture) = regex.captures(&String::from_utf8_lossy(&output.stdout)) {
+                    if let Some(var) = capture.get(0) {
+                        log::debug!("Match: {:?}, Version: {:?}", &var.as_str(), &self.version);
+                        return true;
+                    }
+                }
+
+                false
+            } else {
+                true
             }
+        } else {
+            true
         }
-
-        false
     }
 
     /// get the absolute PATH
@@ -171,17 +181,28 @@ impl Tool {
         self.install_dir.join(self.export_path.as_path())
     }
 
+    /// Return the exported env vars with the special `${TOOL_PATH}` value
+    /// substituted with the tool path
+    fn abs_export_env_vars(&self) -> impl Iterator<Item = (String, String)> + '_ {
+        self.export_vars.iter().map(|(var, value)| {
+            let value = value.replace("${TOOL_PATH}", self.abs_export_path().to_str().unwrap());
+            (var.clone(), value)
+        })
+    }
+
     /// Creates a Command that will echo back the current version of the tool
     ///
     /// Since Command is non clonable this helper is provided
-    fn test_command(&self) -> Command {
-        let cmd_abs_path = self
-            .abs_export_path()
-            .join(self.version_cmd_args[0].clone());
+    fn test_command(&self) -> Option<Command> {
+        (!self.version_cmd_args.is_empty() && !self.version_cmd_args[0].is_empty()).then(|| {
+            let cmd_abs_path = self
+                .abs_export_path()
+                .join(self.version_cmd_args[0].clone());
 
-        let mut version_cmd = std::process::Command::new(cmd_abs_path);
-        version_cmd.args(self.version_cmd_args[1..].iter().cloned());
-        version_cmd
+            let mut version_cmd = std::process::Command::new(cmd_abs_path);
+            version_cmd.args(self.version_cmd_args[1..].iter().cloned());
+            version_cmd
+        })
     }
 }
 
@@ -214,6 +235,7 @@ fn parse_tools(
             install_dir: install_dir.clone(),
             version_cmd_args: tool_info.version_cmd.to_vec(),
             version_regex: tool_info.version_regex.to_string(),
+            export_vars: tool_info.export_vars.as_ref().map(|v| v.0.clone()).unwrap_or_default(),
             ..Default::default()
         };
 
@@ -256,7 +278,7 @@ fn parse_tools(
             tool.export_path = PathBuf::new().join("tools").join(&tool.name).join(&tool.version);
 
             // export_path has two layers if indirection...
-            // it seams only the first array is ever used
+            // it seems only the first array is ever used
             let first_path = tool_info.export_paths.first();
 
             if let Some(path) = first_path {
@@ -326,44 +348,75 @@ pub enum FromEnvError {
     NoRepo(#[source] anyhow::Error),
     /// An `esp-idf` repository exists but the environment is not activated.
     #[error("`esp-idf` repository exists but required tools not in environment")]
-    NotActivated {
-        /// The esp-idf repository detected from the environment.
-        esp_idf_repo: git::Repository,
-        /// The source error why detection failed.
+    NotActivated(
+        #[from]
         #[source]
-        source: anyhow::Error,
-    },
+        NotActivatedError,
+    ),
+}
+
+/// The error returned by [`EspIdf::try_from`].
+/// Indicates that there was some issue during the initial configuration of the
+/// `esp-idf` source tree.
+#[derive(Debug, thiserror::Error)]
+#[error("Error activating `esp-idf` tools")]
+pub struct NotActivatedError {
+    /// The esp-idf repository detected from the environment.
+    pub esp_idf_dir: SourceTree,
+    /// The source error why detection failed.
+    #[source]
+    pub source: anyhow::Error,
 }
 
 /// Information about a esp-idf source and tools installation.
 #[derive(Debug)]
 pub struct EspIdf {
-    /// The esp-idf repository.
-    pub repository: git::Repository,
+    /// The esp-idf source tree.
+    pub esp_idf_dir: SourceTree,
     /// The binary paths of all tools concatenated with the system `PATH` env variable.
     pub exported_path: OsString,
+    /// The environment variables of all tools.
+    pub exported_env_vars: HashMap<String, String>,
     /// The path to the python executable to be used by the esp-idf.
     pub venv_python: PathBuf,
     /// The version of the esp-idf or [`Err`] if it could not be detected.
     pub version: Result<EspIdfVersion>,
-    /// Whether [`EspIdf::repository`] is installed and managed by [`Installer`] and
-    /// **not** provided by the user.
+    /// Whether [`EspIdf::tree`] is a repository installed and managed by
+    /// [`Installer`] and **not** provided by the user.
     pub is_managed_espidf: bool,
 }
 
+#[derive(Debug, Clone)]
+pub enum SourceTree {
+    Git(git::Repository),
+    Plain(PathBuf),
+}
+
+impl SourceTree {
+    pub fn open(path: &Path) -> Self {
+        git::Repository::open(path)
+            .map(SourceTree::Git)
+            .unwrap_or_else(|_| SourceTree::Plain(path.to_owned()))
+    }
+
+    pub fn path(&self) -> &Path {
+        match self {
+            SourceTree::Git(repo) => repo.worktree(),
+            SourceTree::Plain(path) => path,
+        }
+    }
+}
+
 impl EspIdf {
-    /// Try to detect an activated esp-idf environment.
-    pub fn try_from_env() -> Result<EspIdf, FromEnvError> {
-        // detect repo from $IDF_PATH
-        let idf_path = env::var_os(IDF_PATH_VAR).ok_or_else(|| {
-            FromEnvError::NoRepo(anyhow!("environment variable `{IDF_PATH_VAR}` not found"))
-        })?;
-        let repo = git::Repository::open(idf_path).map_err(FromEnvError::NoRepo)?;
+    /// Try to load an activated esp-idf from at the given path.
+    /// `idf_path`: Path to an existing `esp-idf` source tree.
+    pub fn try_from(idf_path: &Path) -> Result<EspIdf, NotActivatedError> {
+        let esp_idf_dir = SourceTree::open(idf_path);
 
         let path_var = env::var_os("PATH").unwrap_or_default();
-        let not_activated = |source: Error| -> FromEnvError {
-            FromEnvError::NotActivated {
-                esp_idf_repo: repo.clone(),
+        let not_activated = |source: Error| -> NotActivatedError {
+            NotActivatedError {
+                esp_idf_dir: esp_idf_dir.clone(),
                 source,
             }
         };
@@ -388,7 +441,7 @@ impl EspIdf {
         .map_err(not_activated)?;
 
         // make sure ${IDF_PATH}/tools/idf.py matches idf.py in $PATH
-        let idf_py_repo = path_buf![repo.worktree(), "tools", "idf.py"];
+        let idf_py_repo = path_buf![esp_idf_dir.path(), "tools", "idf.py"];
         match (idf_py.canonicalize(), idf_py_repo.canonicalize()) {
             (Ok(a), Ok(b)) if a != b => {
                 return Err(not_activated(anyhow!(
@@ -407,19 +460,37 @@ impl EspIdf {
             .with_context(|| anyhow!("python not found in $PATH"))
             .map_err(not_activated)?;
         let check_python_deps_py =
-            path_buf![repo.worktree(), "tools", "check_python_dependencies.py"];
+            path_buf![esp_idf_dir.path(), "tools", "check_python_dependencies.py"];
         cmd!(&python, &check_python_deps_py)
             .stdout()
             .with_context(|| anyhow!("failed to check python dependencies"))
             .map_err(not_activated)?;
 
         Ok(EspIdf {
-            version: EspIdfVersion::try_from(&repo),
-            repository: repo,
+            version: EspIdfVersion::try_from(esp_idf_dir.path()),
+            esp_idf_dir,
             exported_path: path_var,
+            // Env vars are already set by the parent process
+            // and since it is very difficult to extract these,
+            // we just assume that they are already set correctly
+            exported_env_vars: HashMap::new(),
             venv_python: python,
             is_managed_espidf: true,
         })
+    }
+
+    /// Try to detect an activated esp-idf environment.
+    /// Expects `$IDF_PATH` to be contain a path to an `esp-idf` source tree.
+    pub fn try_from_env() -> Result<EspIdf, FromEnvError> {
+        // detect repo from $IDF_PATH if not passed by caller
+        let idf_path = env::var_os(IDF_PATH_VAR)
+            .map(PathBuf::from)
+            .ok_or_else(|| {
+                FromEnvError::NoRepo(anyhow!("environment variable `{IDF_PATH_VAR}` not found"))
+            })?;
+
+        let idf = Self::try_from(&idf_path)?;
+        Ok(idf)
     }
 }
 
@@ -433,8 +504,8 @@ pub struct EspIdfVersion {
 
 impl EspIdfVersion {
     /// Try to extract the esp-idf version from an actual cloned repository.
-    pub fn try_from(repo: &git::Repository) -> Result<Self> {
-        let version_cmake = path_buf![repo.worktree(), "tools", "cmake", "version.cmake"];
+    pub fn try_from(esp_idf_dir: &Path) -> Result<Self> {
+        let version_cmake = path_buf![esp_idf_dir, "tools", "cmake", "version.cmake"];
 
         let base_err = || {
             anyhow!(
@@ -495,9 +566,9 @@ impl std::fmt::Display for EspIdfVersion {
 ///
 /// Two variations exist:
 /// - Managed
-///     The esp-idf source is installed automatically.
+///   The esp-idf source is installed automatically.
 /// - Custom
-///     A user-provided local clone the esp-idf repository.
+///   A user-provided local clone the esp-idf repository.
 ///
 /// In both cases the [`Installer`] will install all required tools.
 ///
@@ -507,7 +578,12 @@ impl std::fmt::Display for EspIdfVersion {
 /// - [`EspIdfOrigin::Custom`] values are designating a user-provided, already cloned
 ///   ESP-IDF repository which lives outisde the [`Installer`]'s installation directory. It is
 ///   only read by the [`Installer`] so as to install the required tooling.
-pub type EspIdfOrigin = git::sdk::SdkOrigin;
+pub enum EspIdfOrigin {
+    /// The [`Installer`] will install and manage the SDK.
+    Managed(git::sdk::RemoteSdk),
+    /// User-provided SDK repository untouched by the [`Installer`].
+    Custom(SourceTree),
+}
 
 /// A distinct version of the esp-idf repository to be installed.
 pub type EspIdfRemote = git::sdk::RemoteSdk;
@@ -518,7 +594,7 @@ pub struct Installer {
     custom_install_dir: Option<PathBuf>,
     #[allow(clippy::type_complexity)]
     tools_provider:
-        Option<Box<dyn FnOnce(&git::Repository, &Result<EspIdfVersion>) -> Result<Vec<Tools>>>>,
+        Option<Box<dyn FnOnce(&SourceTree, &Result<EspIdfVersion>) -> Result<Vec<Tools>>>>,
 }
 
 impl Installer {
@@ -535,7 +611,7 @@ impl Installer {
     #[must_use]
     pub fn with_tools<F>(mut self, provider: F) -> Self
     where
-        F: 'static + FnOnce(&git::Repository, &Result<EspIdfVersion>) -> Result<Vec<Tools>>,
+        F: 'static + FnOnce(&SourceTree, &Result<EspIdfVersion>) -> Result<Vec<Tools>>,
     {
         self.tools_provider = Some(Box::new(provider));
         self
@@ -583,21 +659,20 @@ impl Installer {
             )
         })?;
 
-        let (repository, managed_repo) = match self.esp_idf_origin {
+        let (esp_idf_dir, managed_repo) = match self.esp_idf_origin {
             EspIdfOrigin::Managed(managed) => (
-                managed.open_or_clone(
+                SourceTree::Git(managed.open_or_clone(
                     &install_dir,
                     git::CloneOptions::new().depth(1),
                     DEFAULT_ESP_IDF_REPOSITORY,
                     MANAGED_ESP_IDF_REPOS_DIR_BASE,
-                )?,
+                )?),
                 true,
             ),
-            EspIdfOrigin::Custom(repository) => (repository, false),
+            EspIdfOrigin::Custom(tree) => (tree, false),
         };
-
         // Reading the version out of a cmake build file
-        let esp_version = EspIdfVersion::try_from(&repository)?;
+        let esp_version = EspIdfVersion::try_from(esp_idf_dir.path())?;
 
         // Create python virtualenv or use a previously installed one.
 
@@ -608,14 +683,14 @@ impl Installer {
         let python_version = python::check_python_at_least(3, 6)?;
 
         // Using the idf_tools.py script version that comes with the esp-idf git repository
-        let idf_tools_py = path_buf![repository.worktree(), "tools", "idf_tools.py"];
+        let idf_tools_py = path_buf![esp_idf_dir.path(), "tools", "idf_tools.py"];
 
         // TODO: add virtual_env check to skip install-python-env
         // running the command cost 2-3 seconds but always makes sure that everything is installed correctly and is up-to-date
 
         // assumes that the command can be run repeatedly
         // whenalready installed -> checks for updates and a working state
-        cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--non-interactive", "install-python-env";
+        cmd!(PYTHON, &idf_tools_py, "--idf-path", esp_idf_dir.path(), "--non-interactive", "install-python-env";
         env=(IDF_TOOLS_PATH_VAR, &install_dir), env_remove=("MSYSTEM"), env_remove=(IDF_PYTHON_ENV_PATH_VAR)).run()?;
 
         // since the above command exited sucessfully -> there should be a virt_env dir
@@ -646,7 +721,7 @@ impl Installer {
 
         let tools = self
             .tools_provider
-            .map(|p| p(&repository, &esp_version))
+            .map(|p| p(&esp_idf_dir, &esp_version))
             .unwrap_or(Ok(Vec::new()))?;
 
         let tools_wanted = tools.clone();
@@ -655,7 +730,7 @@ impl Installer {
             .flat_map(|tool| tool.tools.iter().map(|s| s.as_str()))
             .collect();
 
-        let tools_json = repository.worktree().join("tools/tools.json");
+        let tools_json = esp_idf_dir.path().join("tools/tools.json");
 
         let tools_vec = parse_tools(
             tools_wanted.clone(),
@@ -679,7 +754,7 @@ impl Installer {
                     .into_iter()
                     .flatten();
 
-                cmd!(&venv_python, &idf_tools_py, "--idf-path", repository.worktree(), @tools_json.clone(), "install"; 
+                cmd!(&venv_python, &idf_tools_py, "--idf-path", esp_idf_dir.path(), @tools_json.clone(), "install"; 
                      env=(IDF_TOOLS_PATH_VAR, &install_dir), args=(tool_set.tools)).run()?;
             }
 
@@ -691,9 +766,10 @@ impl Installer {
         }
 
         // End Tools install
+
         // Create PATH
 
-        // All tools are installed -> infer there PATH variable by using the information out of tools.json
+        // All tools are installed -> infer the PATH variable by using the information out of tools.json
         let mut tools_path: Vec<PathBuf> = tools_vec
             .iter()
             .map(|tool| tool.abs_export_path())
@@ -707,15 +783,20 @@ impl Installer {
         let paths = env::join_paths(
             tools_path
                 .into_iter()
-                .map(PathBuf::from)
                 .chain(env::split_paths(&env::var_os("PATH").unwrap_or_default())),
         )?;
+
+        let env_vars = tools_vec
+            .iter()
+            .flat_map(|tool| tool.abs_export_env_vars())
+            .collect::<HashMap<_, _>>();
 
         log::debug!("Using PATH='{}'", &paths.to_string_lossy());
 
         Ok(EspIdf {
-            repository,
+            esp_idf_dir,
             exported_path: paths,
+            exported_env_vars: env_vars,
             venv_python,
             version: esp_version,
             is_managed_espidf: managed_repo,
@@ -736,7 +817,7 @@ impl Installer {
 ///
 /// The version string can have the following format:
 /// - `commit:<hash>`: Uses the commit `<hash>` of the `esp-idf` repository. Note that
-///                    this will clone the whole `esp-idf` not just one commit.
+///   this will clone the whole `esp-idf` not just one commit.
 /// - `tag:<tag>`: Uses the tag `<tag>` of the `esp-idf` repository.
 /// - `branch:<branch>`: Uses the branch `<branch>` of the `esp-idf` repository.
 /// - `v<major>.<minor>` or `<major>.<minor>`: Uses the tag `v<major>.<minor>` of the `esp-idf` repository.

@@ -215,7 +215,8 @@ impl Factory {
                 "-fmessage-length=0",
 
                 "-DESP_NN",
-            ]);
+            ])
+            .parse_callbacks(Box::new(StripLinkPrefix));
 
         if let Some(filter) = filter {
             if let Some(allow_functions) = filter.allow_functions {

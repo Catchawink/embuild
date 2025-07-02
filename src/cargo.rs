@@ -317,6 +317,7 @@ pub fn set_metadata(key: impl Display, value: impl Display) {
 
 /// Add an argument that cargo passes to the linker invocation for this package.
 pub fn add_link_arg(arg: impl Display) {
+    println!("cargo:warning=cargo:rustc-link-arg={arg}");
     println!("cargo:rustc-link-arg={arg}");
 }
 

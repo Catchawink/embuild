@@ -149,6 +149,21 @@ impl Factory {
 
     pub fn create_builder(self, cpp: bool, filter: Option<Filter>) -> Result<bindgen::Builder> {
 
+        #[derive(Debug)]
+        struct StripLinkPrefix;
+
+        impl ParseCallbacks for StripLinkPrefix {
+            /// This is called for every `#[link_name = "..."]`.
+            fn generated_link_name_override(
+                &self,
+                info: ItemInfo<'_>,
+            ) -> Option<String> {
+                // e.g. original = "\u{1}foo"; we want "foo"
+                let orig = info.name;
+                Some(orig.trim_matches('\u{1}').replace("\\u{1}", "").trim_matches('\u{0001}').to_string())
+            }
+        }
+
         let cpp = self.force_cpp || cpp;
         let sysroot = self
             .sysroot

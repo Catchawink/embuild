@@ -317,7 +317,6 @@ pub fn set_metadata(key: impl Display, value: impl Display) {
 
 /// Add an argument that cargo passes to the linker invocation for this package.
 pub fn add_link_arg(arg: impl Display) {
-    println!("cargo:warning=cargo:rustc-link-arg={arg}");
     println!("cargo:rustc-link-arg={arg}");
 }
 
@@ -338,14 +337,8 @@ pub fn track_env_var(env_var_name: impl Display) {
 /// compilation.
 pub fn set_rustc_cfg(key: impl Display, value: impl AsRef<str>) {
     if value.as_ref().is_empty() {
-        println!("cargo:warning=cargo:rustc-cfg={key}");
         println!("cargo:rustc-cfg={key}");
     } else {
-        println!(
-            "cargo:warning=cargo:rustc-cfg={}=\"{}\"",
-            key,
-            value.as_ref().replace('\"', "\\\"")
-        );
         println!(
             "cargo:rustc-cfg={}=\"{}\"",
             key,

@@ -158,15 +158,20 @@ impl Factory {
                 &self,
                 info: ItemInfo<'_>,
             ) -> Option<String> {
+                
                 // e.g. original = "\u{1}foo"; we want "foo"
                 let mut name = info.name.to_string();
 
+                println!("cargo:warning=NAME: {name}");
+
                 // 1) If it begins with the *actual* control-A byte, remove that:
-                name = name.trim_start_matches('\u{0001}').to_string();
+                name = name.replace('\u{0001}', "").to_string();
                 // (you can also use .trim_start_matches('\x01'))
 
                 // 2) If it begins with the *literal* backslash-u- brace-1 sequence, strip that too:
-                name = name.trim_start_matches(r"\u{1}").to_string();
+                name = name.replace(r"\u{1}", "").to_string();
+
+                name = name.replace("\x01", "").to_string();
 
                 Some(name)
             }

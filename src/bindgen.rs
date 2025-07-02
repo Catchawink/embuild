@@ -302,7 +302,7 @@ pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) ->
     bindings.write_to_file(output_file)?;
 
     // Hacky fix
-    let mut contents = fs::read(&output_file)?;
+    let mut contents = fs::read_to_string(&output_file)?;
     contents = contents.replace("\u{0001}", "");
     fs::write(output_file, contents)?;
     

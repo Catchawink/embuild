@@ -228,8 +228,8 @@ impl Factory {
                 "-fmessage-length=0",
 
                 "-DESP_NN",
-            ])
-            .parse_callbacks(Box::new(StripLinkPrefix));
+            ]);
+            //.parse_callbacks(Box::new(StripLinkPrefix));
 
         if let Some(filter) = filter {
             if let Some(allow_functions) = filter.allow_functions {
@@ -331,13 +331,11 @@ pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) ->
     bindings.write_to_file(output_file)?;
 
     // Hacky fix
-    let mut contents = fs::read_to_string(&output_file)?;
-    contents = contents.replace("\\u{1}", "").replace('\u{0001}', "").replace(r"\u{1}", "");
-
+    //let mut contents = fs::read_to_string(&output_file)?;
+    //contents = contents.replace("\\u{1}", "").replace('\u{0001}', "").replace(r"\u{1}", "");
     // also strip any real 0x01 bytes, just in case
-    contents = contents.replace('\x01', "");
-
-    fs::write(output_file, contents)?;
+    //contents = contents.replace('\x01', "");
+    //fs::write(output_file, contents)?;
     
     cargo_fmt_file(output_file);
 

@@ -159,8 +159,16 @@ impl Factory {
                 info: ItemInfo<'_>,
             ) -> Option<String> {
                 // e.g. original = "\u{1}foo"; we want "foo"
-                let orig = info.name;
-                Some(orig.trim_matches('\u{1}').replace("\\u{1}", "").trim_matches('\u{0001}').to_string())
+                let mut name = info.name.to_string();
+
+                // 1) If it begins with the *actual* control-A byte, remove that:
+                name = name.trim_start_matches('\u{0001}').to_string();
+                // (you can also use .trim_start_matches('\x01'))
+
+                // 2) If it begins with the *literal* backslash-u- brace-1 sequence, strip that too:
+                name = name.trim_start_matches(r"\u{1}").to_string();
+
+                Some(name)
             }
         }
 

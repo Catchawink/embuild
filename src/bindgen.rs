@@ -332,7 +332,7 @@ pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) ->
 
     // Hacky fix
     let mut contents = fs::read_to_string(&output_file)?;
-    contents = contents.replace("\\u{1}", "").replace('\u{0001}', "");
+    contents = contents.replace("\\u{1}", "").replace('\u{0001}', "").replace(r"\u{1}", "");
 
     // also strip any real 0x01 bytes, just in case
     contents = contents.replace('\x01', "");

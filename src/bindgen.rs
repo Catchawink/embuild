@@ -169,6 +169,7 @@ impl Factory {
             .layout_tests(false)
             .formatter(bindgen::Formatter::None)
             .derive_default(true)
+            .trust_clang_mangling(false)
             .clang_arg("-D__bindgen")
             // Include directories provided by the build system
             // should be first on the search path (before sysroot includes),

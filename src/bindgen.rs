@@ -302,9 +302,9 @@ pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) ->
     bindings.write_to_file(output_file)?;
 
     // Hacky fix
-    let mut contents = fs::read_to_string(&output_file)?;
-    contents = contents.replace("\u{1}", "");
-    fs::write(output_file, contents)?;
+    let mut data = fs::read(&output_file)?;
+    data.retain(|&b| b != 0x01);
+    fs::write(&output_file, &data)?;
     
     cargo_fmt_file(output_file);
 

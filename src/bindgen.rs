@@ -149,21 +149,6 @@ impl Factory {
 
     pub fn create_builder(self, cpp: bool, filter: Option<Filter>) -> Result<bindgen::Builder> {
 
-        #[derive(Debug)]
-        struct StripLinkPrefix;
-
-        impl ParseCallbacks for StripLinkPrefix {
-            /// This is called for every `#[link_name = "..."]`.
-            fn generated_link_name_override(
-                &self,
-                info: ItemInfo<'_>,
-            ) -> Option<String> {
-                // e.g. original = "\u{1}foo"; we want "foo"
-                let orig = info.name;
-                Some(orig.trim_start_matches('\u{1}').to_string())
-            }
-        }
-
         let cpp = self.force_cpp || cpp;
         let sysroot = self
             .sysroot
@@ -189,7 +174,6 @@ impl Factory {
             // Include directories provided by the build system
             // should be first on the search path (before sysroot includes),
             // or else libc's <dirent.h> does not correctly override sysroot's <dirent.h>
-            .parse_callbacks(Box::new(StripLinkPrefix))
             .clang_args(&self.clang_args)
             .clang_args(sysroot_args)
             .clang_args(&["-x", if cpp { "c++" } else { "c" }])
@@ -316,6 +300,12 @@ pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) ->
         .map_err(|_| Error::msg("Failed to generate bindings"))?;
 
     bindings.write_to_file(output_file)?;
+
+    // Hacky fix
+    let mut contents = fs::read_to_string(&output_file)?;
+    contents = contents.replace("\u{1}", "");
+    fs::write(output_file, contents)?;
+    
     cargo_fmt_file(output_file);
 
     Ok(())

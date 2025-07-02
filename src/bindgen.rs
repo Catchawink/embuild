@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
+use bindgen::callbacks::{ItemInfo, ParseCallbacks};
 use serde::Deserialize;
 
 use crate::cargo::out_dir;
@@ -147,6 +148,22 @@ impl Factory {
     }
 
     pub fn create_builder(self, cpp: bool, filter: Option<Filter>) -> Result<bindgen::Builder> {
+
+        #[derive(Debug)]
+        struct StripLinkPrefix;
+
+        impl ParseCallbacks for StripLinkPrefix {
+            /// This is called for every `#[link_name = "..."]`.
+            fn generated_link_name_override(
+                &self,
+                info: ItemInfo<'_>,
+            ) -> Option<String> {
+                // e.g. original = "\u{1}foo"; we want "foo"
+                let orig = info.name;
+                Some(orig.trim_start_matches('\u{1}').to_string())
+            }
+        }
+
         let cpp = self.force_cpp || cpp;
         let sysroot = self
             .sysroot
@@ -172,7 +189,7 @@ impl Factory {
             // Include directories provided by the build system
             // should be first on the search path (before sysroot includes),
             // or else libc's <dirent.h> does not correctly override sysroot's <dirent.h>
-            .trust_clang_mangling(true)
+            .parse_callbacks(Box::new(StripLinkPrefix))
             .clang_args(&self.clang_args)
             .clang_args(sysroot_args)
             .clang_args(&["-x", if cpp { "c++" } else { "c" }])

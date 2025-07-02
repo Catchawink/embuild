@@ -172,6 +172,7 @@ impl Factory {
             // Include directories provided by the build system
             // should be first on the search path (before sysroot includes),
             // or else libc's <dirent.h> does not correctly override sysroot's <dirent.h>
+            .trust_clang_mangling(true)
             .clang_args(&self.clang_args)
             .clang_args(sysroot_args)
             .clang_args(&["-x", if cpp { "c++" } else { "c" }])
